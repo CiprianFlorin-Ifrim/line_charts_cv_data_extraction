@@ -1,0 +1,3 @@
+data generation:
+1) crypto - 15h
+2) binance - 30h
