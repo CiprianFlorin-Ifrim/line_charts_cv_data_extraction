@@ -35,11 +35,39 @@ from datetime import timedelta
 import gc
 import time
 import warnings
+import sys
+
 
 warnings.filterwarnings("ignore")
 
 CUSTOM_CLASSES = {"name": 1, "value": 2, "x-axis": 3, "y-axis": 4, "plot":5}
 PASSTHROUGH_FIELDS = ['folder', 'filename', 'source', 'size', 'segmented', 'object']
+
+def transform_voc_target(target, original_width, original_height, new_width, new_height):
+	boxes = []
+	labels = []
+	width_ratio = new_width / original_width
+	height_ratio = new_height / original_height
+	for obj in target["annotation"]["object"]:
+		class_name = obj[0]
+		bbox = obj[-1]
+		# Normalize the bounding box coordinates
+		boxes.append([float(bbox["xmin"]) * width_ratio, float(bbox["ymin"]) * height_ratio,
+					  float(bbox["xmax"]) * width_ratio, float(bbox["ymax"]) * height_ratio])
+		if class_name in CUSTOM_CLASSES:
+			labels.append(CUSTOM_CLASSES[class_name])
+		else:
+			print(f"Warning: {class_name} is not in CUSTOM_CLASSES")
+			# you might want to handle this situation better
+	boxes = torch.as_tensor(boxes, dtype=torch.float32)
+	labels = torch.as_tensor(labels, dtype=torch.int64)
+	# Hash the filename to a unique numeric value
+	image_id = torch.tensor([hash(target["annotation"]["filename"])])
+	target = {}
+	target["boxes"] = boxes
+	target["labels"] = labels
+	target["image_id"] = image_id
+	return target
 
 class CustomVOCDetection(Dataset):
 	def __init__(self, root, dataset_name, image_set='train', transforms=None, classes=None):
@@ -68,16 +96,26 @@ class CustomVOCDetection(Dataset):
 		img = Image.open(self.images[index]).convert('RGB')
 		if len(img.getbands()) != 3:
 			print(f"Image at {self.images[index]} does not have 3 channels after conversion to RGB")
-			
+
 		# Get the original image size
-		width, height = img.size
+		original_width, original_height = img.size
+
 		target = self.parse_voc_xml(
 			ET.parse(self.annotations[index]).getroot())
 
 		if self.transforms is not None:
 			img = self.transforms(img)
-			#print(f'Image shape after transform: {img.shape}')  # Debugging print
-		target = transform_voc_target(target, width, height)         # Pass the width and height to the function
+
+			# The transformed image size
+			# Calculate new size preserving aspect ratio
+			if original_width <= original_height:
+				new_height = 512
+				new_width = int(original_width * (new_height / original_height))
+			else:
+				new_width = 512
+				new_height = int(original_height * (new_width / original_width))
+
+			target = transform_voc_target(target, original_width, original_height, new_width, new_height)
 
 		return img, target
 
@@ -102,33 +140,9 @@ class CustomVOCDetection(Dataset):
 				voc_dict[node.tag] = text
 		return voc_dict
 
-def transform_voc_target(target, width, height):
-	boxes = []
-	labels = []
-	for obj in target["annotation"]["object"]:
-		class_name = obj[0]
-		bbox = obj[-1]
-		# Normalize the bounding box coordinates
-		boxes.append([float(bbox["xmin"]) / width, float(bbox["ymin"]) / height, float(bbox["xmax"]) / width, float(bbox["ymax"]) / height])
-		if class_name in CUSTOM_CLASSES:
-			labels.append(CUSTOM_CLASSES[class_name])
-		else:
-			print(f"Warning: {class_name} is not in CUSTOM_CLASSES")
-			# you might want to handle this situation better
-	boxes = torch.as_tensor(boxes, dtype=torch.float32)
-	labels = torch.as_tensor(labels, dtype=torch.int64)
-	
-	# Hash the filename to a unique numeric value
-	image_id = torch.tensor([hash(target["annotation"]["filename"])])
-	target = {}
-	target["boxes"] = boxes
-	target["labels"] = labels
-	target["image_id"] = image_id
-
-	return target
-
 def collate_fn(batch):
 	return tuple(zip(*batch))
+
 
 def train(rank, world_size):
 	torch.manual_seed(0)
@@ -159,24 +173,24 @@ def train(rank, world_size):
 	# Apply this function to your dataset using the transforms parameter
 	train_data = CustomVOCDetection(
 		root="pascal_voc_datasets/",
-		dataset_name="Plots_Experimental",
-		image_set="testing",
+		dataset_name="PlotsEnchanced_Original_NoAugmentation",
+		image_set="train",
 		transforms=data_transforms,
 		classes=CUSTOM_CLASSES 
 	)
 
 	val_data = CustomVOCDetection(
 		root="pascal_voc_datasets/",
-		dataset_name="Plots_Experimental",
-		image_set="testing",  # assuming the set name is 'validation'
+		dataset_name="PlotsEnchanced_Original_NoAugmentation",
+		image_set="val",  # assuming the set name is 'validation'
 		transforms=data_transforms,
 		classes=CUSTOM_CLASSES 
 	)
 
 	# Define optimizer
 	params = [p for p in model.parameters() if p.requires_grad]
-	#optimizer = torch.optim.SGD(params, lr=0.0001, momentum=0.9, weight_decay=0.0005)
-	optimizer = torch.optim.Adam(params, lr=0.0001, weight_decay=0.0005)
+	optimizer = torch.optim.SGD(params, lr=0.0001, momentum=0.9, weight_decay=0.0005)
+	#optimizer = torch.optim.Adam(params, lr=0.0001, weight_decay=0.0005)
 
 	# Initialize the gradient scaler
 	scaler = GradScaler()
@@ -186,7 +200,7 @@ def train(rank, world_size):
 	valid_loss_hist = []
 
 	# Add a path for the checkpoint
-	MODEL_NAME = "EXPERIMENTAL_8_rcnn_batch-16_epoch-30_crypto.com-experimental_non-augmented"
+	MODEL_NAME = "FINAL-v2_rcnn_batch-16_epoch-40_full-enchanced-original_non-augmented"
 	MODEL_EXTENSION = ".pt"
 	MODEL_SAVE_DIR = "pytorch_rcnn_models/"
 	MODEL_SAVE_PATH = os.path.join(MODEL_SAVE_DIR, MODEL_NAME + MODEL_EXTENSION)
@@ -231,7 +245,7 @@ def train(rank, world_size):
 	val_data_loader = DataLoader(val_data, batch_size=16, sampler=val_sampler, num_workers = 0, pin_memory=True, collate_fn=collate_fn)
 
 	# Training loop
-	num_epochs = 30
+	num_epochs = 40
 	for epoch in range(start_epoch, num_epochs):
 		gc.collect()
 		if torch.cuda.is_available():
@@ -329,6 +343,9 @@ def train(rank, world_size):
 	if rank == 0:
 		torch.save(model.module.state_dict(), MODEL_SAVE_PATH)  # distributed dataparallel model save
 		print("The model has been saved!")
+
+	torch.distributed.destroy_process_group()
+	sys.exit()
 
 def main():
 	os.environ["OMP_NUM_THREADS"] = "16"             # 16 is too high, same with 12, 4 is too low, 8 is perfect
