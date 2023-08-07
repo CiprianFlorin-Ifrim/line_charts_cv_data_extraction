@@ -173,7 +173,7 @@ def train(rank, world_size):
 	# Apply this function to your dataset using the transforms parameter
 	train_data = CustomVOCDetection(
 		root="pascal_voc_datasets/",
-		dataset_name="PlotsEnchanced_Original_NoAugmentation",
+		dataset_name="PlotsEnchanced_Original_With-3X-Augmentation",
 		image_set="train",
 		transforms=data_transforms,
 		classes=CUSTOM_CLASSES 
@@ -181,7 +181,7 @@ def train(rank, world_size):
 
 	val_data = CustomVOCDetection(
 		root="pascal_voc_datasets/",
-		dataset_name="PlotsEnchanced_Original_NoAugmentation",
+		dataset_name="PlotsEnchanced_Original_With-3X-Augmentation",
 		image_set="val",  # assuming the set name is 'validation'
 		transforms=data_transforms,
 		classes=CUSTOM_CLASSES 
@@ -200,7 +200,7 @@ def train(rank, world_size):
 	valid_loss_hist = []
 
 	# Add a path for the checkpoint
-	MODEL_NAME = "FINAL-v2_rcnn_batch-16_epoch-40_full-enchanced-original_non-augmented"
+	MODEL_NAME = "FINAL-v3_rcnn_batch-16_epoch-40_full-enchanced-original_augmented-3X"
 	MODEL_EXTENSION = ".pt"
 	MODEL_SAVE_DIR = "pytorch_rcnn_models/"
 	MODEL_SAVE_PATH = os.path.join(MODEL_SAVE_DIR, MODEL_NAME + MODEL_EXTENSION)

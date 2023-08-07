@@ -1,7 +1,0 @@
-data generation:
-1) crypto - 15h
-2) binance - 35h
-3) coindesk -
-4) coinmarketcap - 
-
-Changing to mixed precision with AutoCast and GradScaler decreased the GPU usage from 95% average over 10 epochs, to 75% average over 10 epochs.
