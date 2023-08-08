@@ -200,7 +200,7 @@ def train(rank, world_size):
 	valid_loss_hist = []
 
 	# Add a path for the checkpoint
-	MODEL_NAME = "FINAL-v3_rcnn_batch-16_epoch-40_full-enchanced-original_augmented-3X"
+	MODEL_NAME = "FINAL-v2_rcnn_batch-16_epoch-40_full-enchanced-original_augmented-3X"
 	MODEL_EXTENSION = ".pt"
 	MODEL_SAVE_DIR = "pytorch_rcnn_models/"
 	MODEL_SAVE_PATH = os.path.join(MODEL_SAVE_DIR, MODEL_NAME + MODEL_EXTENSION)
@@ -238,8 +238,8 @@ def train(rank, world_size):
 		model = torch.nn.parallel.DistributedDataParallel(model.to(device), device_ids=[device])
 		
 	# create dataloaders
-	train_sampler = DistributedSampler(train_data)
-	val_sampler = DistributedSampler(val_data)
+	train_sampler = DistributedSampler(train_data, shuffle=True)
+	val_sampler = DistributedSampler(val_data, shuffle=False)
 
 	train_data_loader = DataLoader(train_data, batch_size=16, sampler=train_sampler, num_workers = 0, pin_memory=True, collate_fn=collate_fn)
 	val_data_loader = DataLoader(val_data, batch_size=16, sampler=val_sampler, num_workers = 0, pin_memory=True, collate_fn=collate_fn)
