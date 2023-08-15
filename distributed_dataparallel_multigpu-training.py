@@ -58,7 +58,7 @@ def transform_voc_target(target, original_width, original_height, new_width, new
 			labels.append(CUSTOM_CLASSES[class_name])
 		else:
 			print(f"Warning: {class_name} is not in CUSTOM_CLASSES")
-			# you might want to handle this situation better
+	
 	boxes = torch.as_tensor(boxes, dtype=torch.float32)
 	labels = torch.as_tensor(labels, dtype=torch.int64)
 	# Hash the filename to a unique numeric value
@@ -149,7 +149,7 @@ def train(rank, world_size):
 	torch.cuda.set_device(rank)
 	device = torch.device(f'cuda:{rank}')
 
-	# initialize the process group
+	# Initialize the process group
 	dist.init_process_group("gloo", rank=rank, world_size=world_size, timeout=timedelta(minutes=int(1e6)))     # there seem to be some timeout issues with my network, this high value stops the system from crashing, could be a windows NIC issue
 
 	# Load the pretrained model
@@ -237,7 +237,7 @@ def train(rank, world_size):
 		if rank == 0: print("Using", torch.cuda.device_count(), "GPUs!")
 		model = torch.nn.parallel.DistributedDataParallel(model.to(device), device_ids=[device])
 		
-	# create dataloaders
+	# Create dataloaders
 	train_sampler = DistributedSampler(train_data, shuffle=True)
 	val_sampler = DistributedSampler(val_data, shuffle=False)
 
@@ -282,7 +282,7 @@ def train(rank, world_size):
 			scaler.update()
 
 			# Wrap the loss in a tensor.
-			# We'll use dist.all_reduce to sum it across all processes.
+			# Use dist.all_reduce to sum it across all processes.
 			loss_tensor = torch.tensor(losses.item()).to(device)
 			dist.all_reduce(loss_tensor)
 			loss_tensor /= world_size  # Average loss across all processes
@@ -314,7 +314,7 @@ def train(rank, world_size):
 				losses = sum(loss for loss in loss_dict.values())
 
 				# Wrap the loss in a tensor.
-				# We'll use dist.all_reduce to sum it across all processes.
+				# Use dist.all_reduce to sum it across all processes.
 				loss_tensor = torch.tensor(losses.item()).to(device)
 				dist.all_reduce(loss_tensor)
 				loss_tensor /= world_size  # Average loss across all processes
